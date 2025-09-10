@@ -1,0 +1,4 @@
+port: "8080"
+
+db:
+  dsn: "postgres://viktor:123@db:5432/subscriptions?sslmode=disable"
