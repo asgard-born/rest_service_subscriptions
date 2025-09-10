@@ -1,0 +1,29 @@
+services:
+  db:
+    image: postgres:17
+    container_name: subscriptions-bd
+    environment:
+      POSTGRES_USER: viktor
+      POSTGRES_PASSWORD: 123
+      POSTGRES_DB: subscriptions
+    ports:
+      - 127.0.0.1:5433:5432
+    networks: [ backend ]
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: subscriptions-service
+    environment:
+      DATABASE_URL: postgres://viktor:123@db:5432/subscriptions?sslmode=disable
+    ports:
+      - 127.0.0.1:8080:8080
+    networks: [ backend ]
+    depends_on:
+      - db
+
+networks:
+  backend:
+    name: subscriptions-backend-network
+    driver: bridge
