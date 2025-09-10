@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"log"
 	"net/http"
 	"time"
 )
@@ -59,9 +60,13 @@ func CreateNewRouter(db *pgxpool.Pool) *gin.Engine {
 }
 
 func (h *Handler) CreateSubscription(c *gin.Context) {
+	log.Println("CreateSubscription called")
+
 	var req CreateSubscriptionRequest
 
 	if err := c.BindJSON(&req); err != nil {
+		log.Printf("failed to bind JSON: %v", err)
+
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Error:     "invalid request body",
 			Code:      http.StatusBadRequest,
@@ -70,7 +75,11 @@ func (h *Handler) CreateSubscription(c *gin.Context) {
 		return
 	}
 
+	log.Printf("request: %+v", req)
+
 	if _, err := uuid.Parse(req.UserID); err != nil {
+		log.Printf("invalid user_id: %s", req.UserID)
+
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Error:     "invalid user_id, must be UUID",
 			Code:      http.StatusBadRequest,
@@ -81,6 +90,8 @@ func (h *Handler) CreateSubscription(c *gin.Context) {
 
 	startDate, err := time.Parse("01-2006", req.StartDate)
 	if err != nil {
+		log.Printf("invalid start_date: %s", req.StartDate)
+
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Error:     "invalid start_date, use MM-YYYY",
 			Code:      http.StatusBadRequest,
@@ -93,6 +104,8 @@ func (h *Handler) CreateSubscription(c *gin.Context) {
 	if req.EndDate != nil {
 		date, err := time.Parse("01-2006", *req.EndDate)
 		if err != nil {
+			log.Printf("invalid end_date: %s", *req.EndDate)
+
 			c.JSON(http.StatusBadRequest, ErrorResponse{
 				Error:     "invalid end_date, use MM-YYYY",
 				Code:      http.StatusBadRequest,
@@ -112,14 +125,17 @@ func (h *Handler) CreateSubscription(c *gin.Context) {
 	).Scan(&id)
 
 	if err != nil {
+		log.Printf("failed to insert subscription: %v", err)
+
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Error:     "failed to insert subscription",
-			Details:   err.Error(),
 			Code:      http.StatusInternalServerError,
 			Timestamp: time.Now().UTC().Format(time.RFC3339),
 		})
 		return
 	}
+
+	log.Printf("subscription created with id=%s", id)
 
 	c.JSON(http.StatusCreated, gin.H{
 		"id":        id,
@@ -128,9 +144,12 @@ func (h *Handler) CreateSubscription(c *gin.Context) {
 }
 
 func (h *Handler) UpdateSubscription(c *gin.Context) {
+	log.Println("UpdateSubscription called")
+
 	id := c.Param("id")
 
 	if id == "" {
+		log.Println("missing id param")
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Error:     "id is required",
 			Code:      http.StatusBadRequest,
@@ -139,8 +158,13 @@ func (h *Handler) UpdateSubscription(c *gin.Context) {
 		return
 	}
 
+	log.Printf("updating subscription id=%s", id)
+
 	var req UpdateSubscriptionRequest
+
 	if err := c.BindJSON(&req); err != nil {
+		log.Printf("failed to bind JSON: %v", err)
+
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Error:     "invalid request body",
 			Code:      http.StatusBadRequest,
@@ -149,8 +173,13 @@ func (h *Handler) UpdateSubscription(c *gin.Context) {
 		return
 	}
 
+	log.Printf("update request: %+v", req)
+
 	startDate, err := time.Parse("01-2006", req.StartDate)
+
 	if err != nil {
+		log.Printf("invalid start_date: %s", req.StartDate)
+
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Error:     "invalid start_date, use MM-YYYY",
 			Code:      http.StatusBadRequest,
@@ -160,9 +189,13 @@ func (h *Handler) UpdateSubscription(c *gin.Context) {
 	}
 
 	var endDate *time.Time
+
 	if req.EndDate != nil {
 		date, err := time.Parse("01-2006", *req.EndDate)
+
 		if err != nil {
+			log.Printf("invalid end_date: %s", *req.EndDate)
+
 			c.JSON(http.StatusBadRequest, ErrorResponse{
 				Error:     "invalid end_date, use MM-YYYY",
 				Code:      http.StatusBadRequest,
@@ -197,6 +230,8 @@ func (h *Handler) UpdateSubscription(c *gin.Context) {
 		&sub.UpdatedAt)
 
 	if err == sql.ErrNoRows {
+		log.Printf("subscription not found: id=%s", id)
+
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Error:     "subscription not found",
 			Code:      http.StatusNotFound,
@@ -204,8 +239,9 @@ func (h *Handler) UpdateSubscription(c *gin.Context) {
 		})
 		return
 	}
-
 	if err != nil {
+		log.Printf("failed to update subscription id=%s: %v", id, err)
+
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Error:     "failed to update subscription",
 			Code:      http.StatusInternalServerError,
@@ -214,6 +250,7 @@ func (h *Handler) UpdateSubscription(c *gin.Context) {
 		return
 	}
 
+	log.Printf("subscription updated: %+v", sub)
 	c.JSON(http.StatusOK, sub)
 }
 
