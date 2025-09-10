@@ -10,4 +10,3 @@ CREATE TABLE IF NOT EXISTS subscriptions
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CHECK (end_date IS NULL OR end_date >= start_date)
 );
-
