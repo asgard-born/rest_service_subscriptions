@@ -12,32 +12,34 @@ import (
 
 func main() {
 	dsn := os.Getenv("DATABASE_URL")
+
 	if dsn == "" {
 		log.Fatal("DATABASE_URL is not set")
 	}
 
-	dbpool, err := pgxpool.New(context.Background(), dsn)
+	dbPool, err := pgxpool.New(context.Background(), dsn)
 
 	if err != nil {
 		log.Fatalf("Unable to create connection pool: %v", err)
 	}
 
-	defer dbpool.Close()
+	defer dbPool.Close()
 
-	if err := dbpool.Ping(context.Background()); err != nil {
+	if err := dbPool.Ping(context.Background()); err != nil {
 		log.Fatalf("failed to ping db: %s", err.Error())
 	}
 
 	log.Println("✅ Connected to Postgres (pgxpool)")
 
 	port := os.Getenv("PORT")
+
 	if port == "" {
 		port = "8080"
 	}
 
 	srv := new(service.Server)
 
-	if err := srv.Run(port, api.CreateNewRouter(dbpool)); err != nil {
+	if err := srv.Run(port, api.CreateNewRouter(dbPool)); err != nil {
 		log.Fatalf("error occurred while running http server: %s", err.Error())
 	}
 }
