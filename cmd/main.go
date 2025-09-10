@@ -1,44 +1,43 @@
 package main
 
 import (
-	"database/sql"
+	"context"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"log"
 	"os"
 
 	service "github.com/asgard-born/rest_service_subscriptions"
-	"github.com/asgard-born/rest_service_subscriptions/pkg/handle"
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/asgard-born/rest_service_subscriptions/pkg/api"
 )
 
 func main() {
-	// читаем ENV
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
 		log.Fatal("DATABASE_URL is not set")
 	}
+
+	dbpool, err := pgxpool.New(context.Background(), dsn)
+
+	if err != nil {
+		log.Fatalf("Unable to create connection pool: %v", err)
+	}
+
+	defer dbpool.Close()
+
+	if err := dbpool.Ping(context.Background()); err != nil {
+		log.Fatalf("failed to ping db: %s", err.Error())
+	}
+
+	log.Println("✅ Connected to Postgres (pgxpool)")
 
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
 
-	// подключение к БД
-	db, err := sql.Open("pgx", dsn)
-	if err != nil {
-		log.Fatalf("failed to open db: %s", err.Error())
-	}
-
-	if err := db.Ping(); err != nil {
-		log.Fatalf("failed to ping db: %s", err.Error())
-	}
-
-	log.Println("✅ Connected to Postgres")
-
-	// запуск сервера
-	handler := handle.Handler{}
 	srv := new(service.Server)
 
-	if err := srv.Run(port, handler.InitRoutes()); err != nil {
+	if err := srv.Run(port, api.CreateNewRouter(dbpool)); err != nil {
 		log.Fatalf("error occurred while running http server: %s", err.Error())
 	}
 }
