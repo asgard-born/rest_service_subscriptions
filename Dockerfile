@@ -9,7 +9,6 @@ RUN go build -ldflags="-s -w" -o server ./cmd
 FROM alpine
 WORKDIR /app
 RUN apk --no-cache add ca-certificates
-COPY configs/config.yaml /app/configs/config.yaml
 COPY --from=builder --chmod=755 /app/server /app/server
 RUN ls -la /app
 ENTRYPOINT ["/app/server"]

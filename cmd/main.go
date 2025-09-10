@@ -3,55 +3,42 @@ package main
 import (
 	"database/sql"
 	"log"
+	"os"
 
 	service "github.com/asgard-born/rest_service_subscriptions"
 	"github.com/asgard-born/rest_service_subscriptions/pkg/handle"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/spf13/viper"
 )
 
 func main() {
-	if err := initConfig(); err != nil {
-		log.Fatalf("error initializing configs: %s", err.Error())
-	}
-
-	dsn := viper.GetString("db.dsn")
+	// читаем ENV
+	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
-		dsn = getenv("DATABASE_URL", "")
+		log.Fatal("DATABASE_URL is not set")
 	}
 
-	db, err := sql.Open("pgx", dsn)
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 
+	// подключение к БД
+	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		log.Fatalf("failed to open db: %s", err.Error())
 	}
+
 	if err := db.Ping(); err != nil {
 		log.Fatalf("failed to ping db: %s", err.Error())
 	}
 
 	log.Println("✅ Connected to Postgres")
 
+	// запуск сервера
 	handler := handle.Handler{}
 	srv := new(service.Server)
 
-	if err := srv.Run(viper.GetString("port"), handler.InitRoutes()); err != nil {
+	if err := srv.Run(port, handler.InitRoutes()); err != nil {
 		log.Fatalf("error occurred while running http server: %s", err.Error())
 	}
-
-	defer db.Close()
-}
-
-func initConfig() error {
-	viper.AddConfigPath("./configs")
-	viper.SetConfigName("config")
-	viper.SetConfigType("yaml")
-	return viper.ReadInConfig()
-}
-
-func getenv(key, fallback string) string {
-	if value := viper.GetString(key); value != "" {
-		return value
-	}
-
-	return fallback
 }
