@@ -239,25 +239,44 @@ func (h *Handler) GetSubscriptionsSummary(c *gin.Context) {
 	periodStart := c.Query("period_start")
 	periodEnd := c.Query("period_end")
 
+	if periodStart == "" || periodEnd == "" {
+		RespondError(c, http.StatusBadRequest, "period_start and period_end are required (YYYY-MM-DD)")
+		return
+	}
+
+	start, err := time.Parse("2006-01-02", periodStart)
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid period_start format, expected YYYY-MM-DD")
+		return
+	}
+
+	end, err := time.Parse("2006-01-02", periodEnd)
+	if err != nil {
+		RespondError(c, http.StatusBadRequest, "invalid period_end format, expected YYYY-MM-DD")
+		return
+	}
+
 	query := `
-		SELECT COALESCE(SUM(price), 0)
-		FROM subscriptions
-		WHERE start_date >= $1 AND (end_date IS NULL OR end_date <= $2)
-	`
-	args := []interface{}{periodStart, periodEnd}
+        SELECT COALESCE(SUM(price), 0)
+        FROM subscriptions
+        WHERE start_date >= $1
+          AND (end_date IS NULL OR end_date >= $1)
+          AND start_date <= $2
+    `
+	args := []interface{}{start, end}
 
 	if userID != "" {
 		query += " AND user_id = $3"
 		args = append(args, userID)
 	}
+
 	if serviceName != "" {
 		query += " AND service_name = $" + strconv.Itoa(len(args)+1)
 		args = append(args, serviceName)
 	}
 
-	var total float64
-
-	err := h.db.QueryRow(c.Request.Context(), query, args...).Scan(&total)
+	var total int64
+	err = h.db.QueryRow(c.Request.Context(), query, args...).Scan(&total)
 
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "failed to calculate summary")
