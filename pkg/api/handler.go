@@ -1,8 +1,8 @@
 package api
 
 import (
-	"fmt"
 	"github.com/asgard-born/rest_service_subscriptions/pkg/db"
+	"github.com/asgard-born/rest_service_subscriptions/pkg/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -250,13 +250,13 @@ func (h *Handler) GetSubscriptionsSummary(c *gin.Context) {
 		return
 	}
 
-	periodStart, err := parseToMonthYear(c.Query("period_start"))
+	periodStart, err := utils.ParseToMonthYear(c.Query("period_start"))
 	if err != nil {
 		RespondError(c, http.StatusBadRequest, "invalid period_start format")
 		return
 	}
 
-	periodEnd, err := parseToMonthYear(c.Query("period_end"))
+	periodEnd, err := utils.ParseToMonthYear(c.Query("period_end"))
 	if err != nil {
 		RespondError(c, http.StatusBadRequest, "invalid period_end format")
 		return
@@ -288,24 +288,4 @@ func (h *Handler) GetSubscriptionsSummary(c *gin.Context) {
 		"from":    periodStartQuery,
 		"to":      periodEndQuery,
 	})
-}
-
-func parseToMonthYear(input string) (time.Time, error) {
-	layouts := []string{
-		"2006-01-02", // YYYY-MM-DD
-		"02.01.2006", // DD.MM.YYYY
-		"01-2006",    // MM-YYYY
-		"2006-01",    // YYYY-MM
-	}
-
-	var t time.Time
-	var err error
-
-	for _, layout := range layouts {
-		t, err = time.Parse(layout, input)
-		if err == nil {
-			return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC), nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("invalid date format, expected MM-YYYY")
 }
