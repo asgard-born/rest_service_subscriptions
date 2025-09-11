@@ -7,10 +7,10 @@ import (
 
 func ParseToMonthYear(input string) (time.Time, error) {
 	layouts := []string{
-		"2006-01-02", // YYYY-MM-DD
-		"02.01.2006", // DD.MM.YYYY
-		"01-2006",    // MM-YYYY
-		"2006-01",    // YYYY-MM
+		"2006-01-02",
+		"02.01.2006",
+		"01-2006",
+		"2006-01",
 	}
 
 	var t time.Time
