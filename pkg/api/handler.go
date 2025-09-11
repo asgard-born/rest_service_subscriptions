@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"github.com/asgard-born/rest_service_subscriptions/pkg/db"
 	"github.com/asgard-born/rest_service_subscriptions/pkg/utils"
 	"github.com/gin-gonic/gin"
@@ -240,52 +241,58 @@ func (h *Handler) GetSubscriptionsSummary(c *gin.Context) {
 	periodStartQuery := c.Query("period_start")
 	periodEndQuery := c.Query("period_end")
 
-	if userID == "" || serviceName == "" {
-		RespondError(c, http.StatusBadRequest, "user_id and service_name are required")
-		return
-	}
-
 	if periodStartQuery == "" || periodEndQuery == "" {
 		RespondError(c, http.StatusBadRequest, "period_start and period_end are required (MM-YYYY)")
 		return
 	}
 
-	periodStart, err := utils.ParseToMonthYear(c.Query("period_start"))
+	periodStart, err := utils.ParseToMonthYear(periodStartQuery)
 	if err != nil {
-		RespondError(c, http.StatusBadRequest, "invalid period_start format")
+		RespondError(c, http.StatusBadRequest, "invalid period_start, use MM-YYYY")
 		return
 	}
 
-	periodEnd, err := utils.ParseToMonthYear(c.Query("period_end"))
+	periodEnd, err := utils.ParseToMonthYear(periodEndQuery)
 	if err != nil {
-		RespondError(c, http.StatusBadRequest, "invalid period_end format")
+		RespondError(c, http.StatusBadRequest, "invalid period_end, use MM-YYYY")
 		return
+	}
+
+	query := `
+		SELECT COALESCE(SUM(price), 0)
+		FROM subscriptions
+		WHERE start_date >= $1
+		  AND (end_date IS NULL OR end_date >= $1)
+		  AND start_date <= $2
+	`
+
+	args := []interface{}{periodStart, periodEnd}
+	argPos := 3
+
+	if userID != "" {
+		query += fmt.Sprintf(" AND user_id = $%d", argPos)
+		args = append(args, userID)
+		argPos++
+	}
+
+	if serviceName != "" {
+		query += fmt.Sprintf(" AND service_name = $%d", argPos)
+		args = append(args, serviceName)
+		argPos++
 	}
 
 	var total int64
-
-	err = h.db.QueryRow(
-		c.Request.Context(),
-		`SELECT COALESCE(SUM(price), 0)
-		 FROM subscriptions
-		 WHERE user_id = $1
-		   AND service_name = $2
-		   AND start_date >= $3
-		   AND (end_date IS NULL OR end_date >= $3)
-		   AND start_date <= $4`,
-		userID, serviceName, periodStart, periodEnd,
-	).Scan(&total)
-
+	err = h.db.QueryRow(c.Request.Context(), query, args...).Scan(&total)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "failed to calculate summary")
 		return
 	}
 
 	RespondSuccess(c, http.StatusOK, gin.H{
-		"total":   total,
-		"user_id": userID,
-		"service": serviceName,
-		"from":    periodStartQuery,
-		"to":      periodEndQuery,
+		"user_id":      userID,
+		"service_name": serviceName,
+		"period_start": periodStart.Format("01-2006"),
+		"period_end":   periodEnd.Format("01-2006"),
+		"total":        total,
 	})
 }
