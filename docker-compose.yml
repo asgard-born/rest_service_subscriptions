@@ -10,6 +10,20 @@ services:
       - 127.0.0.1:5433:5432
     networks: [ backend ]
 
+  migrations:
+    image: migrate/migrate
+    container_name: subscriptions-migrations
+    volumes:
+      - ./migrations:/migrations
+    command: [
+      "-path", "/migrations",
+      "-database", "postgres://viktor:123@db:5432/subscriptions?sslmode=disable",
+      "up"
+    ]
+    depends_on:
+      - db
+    networks: [ backend ]
+
   app:
     build:
       context: .
@@ -22,6 +36,7 @@ services:
     networks: [ backend ]
     depends_on:
       - db
+      - migrations
 
 networks:
   backend:
