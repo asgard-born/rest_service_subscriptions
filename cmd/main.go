@@ -2,8 +2,7 @@ package main
 
 import (
 	"context"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -11,35 +10,43 @@ import (
 
 	service "github.com/asgard-born/rest_service_subscriptions"
 	"github.com/asgard-born/rest_service_subscriptions/pkg/api"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
-	log.Println("Starting application...")
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+
+	slog.SetDefault(logger)
+
+	slog.Info("Starting application...")
 
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
-		log.Fatal("DATABASE_URL is not set")
+		slog.Error("DATABASE_URL is not set")
+		os.Exit(1)
 	}
 
 	pool, err := pgxpool.New(context.Background(), dsn)
 	if err != nil {
-		log.Fatalf("Unable to create connection pool: %v", err)
+		slog.Error("Unable to create connection pool", "error", err)
+		os.Exit(1)
 	}
 	defer pool.Close()
 
 	if err := pool.Ping(context.Background()); err != nil {
-		log.Fatalf("Failed to ping database: %v", err)
+		slog.Error("Failed to ping database", "error", err)
+		os.Exit(1)
 	}
 
-	log.Println("Connected to Postgres (pgxpool)")
+	slog.Info("Connected to Postgres (pgxpool)")
 
 	port := os.Getenv("PORT")
-
 	if port == "" {
 		port = "8080"
 	}
-
-	log.Printf("HTTP server will listen on port %s", port)
+	slog.Info("HTTP server configured", "port", port)
 
 	srv := new(service.Server)
 
@@ -48,19 +55,21 @@ func main() {
 
 	go func() {
 		if err := srv.Run(port, api.CreateNewRouter(pool)); err != nil {
-			log.Fatalf("Error occurred while running HTTP server: %v", err)
+			slog.Error("Error occurred while running HTTP server", "error", err)
+			os.Exit(1)
 		}
 	}()
 
 	<-quit
-	log.Println("Shutdown signal received")
+	slog.Warn("Shutdown signal received")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+		slog.Error("Server forced to shutdown", "error", err)
+		os.Exit(1)
 	}
 
-	log.Println("Server exited properly")
+	slog.Info("Server exited properly")
 }
