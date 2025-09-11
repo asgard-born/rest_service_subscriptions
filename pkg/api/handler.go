@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -259,5 +260,38 @@ func (h *Handler) ListSubscriptions(c *gin.Context) {
 }
 
 func (h *Handler) GetSubscriptionsSummary(c *gin.Context) {
+	userID := c.Query("user_id")
+	serviceName := c.Query("service_name")
+	periodStart := c.Query("period_start")
+	periodEnd := c.Query("period_end")
 
+	query := `
+		SELECT COALESCE(SUM(price), 0)
+		FROM subscriptions
+		WHERE start_date >= $1 AND (end_date IS NULL OR end_date <= $2)
+	`
+	args := []interface{}{periodStart, periodEnd}
+
+	if userID != "" {
+		query += " AND user_id = $3"
+		args = append(args, userID)
+	}
+	if serviceName != "" {
+		query += " AND service_name = $" + strconv.Itoa(len(args)+1)
+		args = append(args, serviceName)
+	}
+
+	var total float64
+
+	err := h.db.QueryRow(c.Request.Context(), query, args...).Scan(&total)
+
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "failed to calculate summary")
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"total":     total,
+		"timestamp": time.Now().UTC(),
+	})
 }
