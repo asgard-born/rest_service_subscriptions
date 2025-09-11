@@ -1,13 +1,13 @@
 package api
 
 import (
+	"fmt"
 	"github.com/asgard-born/rest_service_subscriptions/pkg/db"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"time"
 )
 
@@ -158,6 +158,7 @@ func (h *Handler) UpdateSubscription(c *gin.Context) {
 	}
 
 	var sub db.Subscription
+
 	err = h.db.QueryRow(
 		c.Request.Context(),
 		`UPDATE subscriptions
@@ -236,55 +237,75 @@ func (h *Handler) ListSubscriptions(c *gin.Context) {
 func (h *Handler) GetSubscriptionsSummary(c *gin.Context) {
 	userID := c.Query("user_id")
 	serviceName := c.Query("service_name")
-	periodStart := c.Query("period_start")
-	periodEnd := c.Query("period_end")
+	periodStartQuery := c.Query("period_start")
+	periodEndQuery := c.Query("period_end")
 
-	if periodStart == "" || periodEnd == "" {
-		RespondError(c, http.StatusBadRequest, "period_start and period_end are required (YYYY-MM-DD)")
+	if userID == "" || serviceName == "" {
+		RespondError(c, http.StatusBadRequest, "user_id and service_name are required")
 		return
 	}
 
-	start, err := time.Parse("2006-01-02", periodStart)
+	if periodStartQuery == "" || periodEndQuery == "" {
+		RespondError(c, http.StatusBadRequest, "period_start and period_end are required (MM-YYYY)")
+		return
+	}
+
+	periodStart, err := parseToMonthYear(c.Query("period_start"))
 	if err != nil {
-		RespondError(c, http.StatusBadRequest, "invalid period_start format, expected YYYY-MM-DD")
+		RespondError(c, http.StatusBadRequest, "invalid period_start format")
 		return
 	}
 
-	end, err := time.Parse("2006-01-02", periodEnd)
+	periodEnd, err := parseToMonthYear(c.Query("period_end"))
 	if err != nil {
-		RespondError(c, http.StatusBadRequest, "invalid period_end format, expected YYYY-MM-DD")
+		RespondError(c, http.StatusBadRequest, "invalid period_end format")
 		return
-	}
-
-	query := `
-        SELECT COALESCE(SUM(price), 0)
-        FROM subscriptions
-        WHERE start_date >= $1
-          AND (end_date IS NULL OR end_date >= $1)
-          AND start_date <= $2
-    `
-	args := []interface{}{start, end}
-
-	if userID != "" {
-		query += " AND user_id = $3"
-		args = append(args, userID)
-	}
-
-	if serviceName != "" {
-		query += " AND service_name = $" + strconv.Itoa(len(args)+1)
-		args = append(args, serviceName)
 	}
 
 	var total int64
-	err = h.db.QueryRow(c.Request.Context(), query, args...).Scan(&total)
+
+	err = h.db.QueryRow(
+		c.Request.Context(),
+		`SELECT COALESCE(SUM(price), 0)
+		 FROM subscriptions
+		 WHERE user_id = $1
+		   AND service_name = $2
+		   AND start_date >= $3
+		   AND (end_date IS NULL OR end_date >= $3)
+		   AND start_date <= $4`,
+		userID, serviceName, periodStart, periodEnd,
+	).Scan(&total)
 
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "failed to calculate summary")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"total":     total,
-		"timestamp": time.Now().UTC(),
+	RespondSuccess(c, http.StatusOK, gin.H{
+		"total":   total,
+		"user_id": userID,
+		"service": serviceName,
+		"from":    periodStartQuery,
+		"to":      periodEndQuery,
 	})
+}
+
+func parseToMonthYear(input string) (time.Time, error) {
+	layouts := []string{
+		"2006-01-02", // YYYY-MM-DD
+		"02.01.2006", // DD.MM.YYYY
+		"01-2006",    // MM-YYYY
+		"2006-01",    // YYYY-MM
+	}
+
+	var t time.Time
+	var err error
+
+	for _, layout := range layouts {
+		t, err = time.Parse(layout, input)
+		if err == nil {
+			return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC), nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("invalid date format, expected MM-YYYY")
 }
