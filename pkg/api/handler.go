@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -232,7 +233,64 @@ func (h *Handler) DeleteSubscription(c *gin.Context) {
 }
 
 func (h *Handler) ListSubscriptions(c *gin.Context) {
+	userID := c.Query("user_id")
+	serviceName := c.Query("service_name")
+	limitStr := c.DefaultQuery("limit", "10")
+	offsetStr := c.DefaultQuery("offset", "0")
 
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		RespondError(c, http.StatusBadRequest, "invalid limit")
+		return
+	}
+
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil || offset < 0 {
+		RespondError(c, http.StatusBadRequest, "invalid offset")
+		return
+	}
+
+	query :=
+		`SELECT id, service_name, price, user_id, start_date, end_date, created_at, updated_at
+		FROM subscriptions
+		WHERE 1=1`
+
+	var args []interface{}
+	argIndex := 1
+
+	if userID != "" {
+		query += fmt.Sprintf(" AND user_id = $%d", argIndex)
+		args = append(args, userID)
+		argIndex++
+	}
+
+	if serviceName != "" {
+		query += fmt.Sprintf(" AND service_name = $%d", argIndex)
+		args = append(args, serviceName)
+		argIndex++
+	}
+
+	query += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d OFFSET $%d", argIndex, argIndex+1)
+	args = append(args, limit, offset)
+
+	rows, err := h.db.Query(c.Request.Context(), query, args...)
+	if err != nil {
+		RespondError(c, http.StatusInternalServerError, "failed to list subscriptions")
+		return
+	}
+	defer rows.Close()
+
+	var subs []db.Subscription
+	for rows.Next() {
+		var s db.Subscription
+		if err := rows.Scan(&s.ID, &s.ServiceName, &s.Price, &s.UserID, &s.StartDate, &s.EndDate, &s.CreatedAt, &s.UpdatedAt); err != nil {
+			RespondError(c, http.StatusInternalServerError, "failed to scan subscription")
+			return
+		}
+		subs = append(subs, s)
+	}
+
+	RespondSuccess(c, http.StatusOK, subs)
 }
 
 func (h *Handler) GetSubscriptionsSummary(c *gin.Context) {
@@ -241,8 +299,8 @@ func (h *Handler) GetSubscriptionsSummary(c *gin.Context) {
 	periodStartQuery := c.Query("period_start")
 	periodEndQuery := c.Query("period_end")
 
-	if periodStartQuery == "" || periodEndQuery == "" {
-		RespondError(c, http.StatusBadRequest, "period_start and period_end are required (MM-YYYY)")
+	if periodStartQuery == "" {
+		RespondError(c, http.StatusBadRequest, "period_start is required")
 		return
 	}
 
@@ -252,36 +310,39 @@ func (h *Handler) GetSubscriptionsSummary(c *gin.Context) {
 		return
 	}
 
-	periodEnd, err := utils.ParseToMonthYear(periodEndQuery)
-	if err != nil {
-		RespondError(c, http.StatusBadRequest, "invalid period_end, use MM-YYYY")
-		return
+	var periodEnd time.Time
+	if periodEndQuery == "" {
+		now := time.Now().UTC()
+		periodEnd = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	} else {
+		periodEnd, err = utils.ParseToMonthYear(periodEndQuery)
+		if err != nil {
+			RespondError(c, http.StatusBadRequest, "invalid period_end, use MM-YYYY")
+			return
+		}
 	}
 
-	query := `
-		SELECT COALESCE(SUM(price), 0)
+	query :=
+		`SELECT COALESCE(SUM(price), 0)
 		FROM subscriptions
 		WHERE start_date >= $1
 		  AND (end_date IS NULL OR end_date >= $1)
-		  AND start_date <= $2
-	`
+		  AND start_date <= $2`
 
 	args := []interface{}{periodStart, periodEnd}
-	argPos := 3
 
 	if userID != "" {
-		query += fmt.Sprintf(" AND user_id = $%d", argPos)
+		query += " AND user_id = $" + strconv.Itoa(len(args)+1)
 		args = append(args, userID)
-		argPos++
 	}
 
 	if serviceName != "" {
-		query += fmt.Sprintf(" AND service_name = $%d", argPos)
+		query += " AND service_name = $" + strconv.Itoa(len(args)+1)
 		args = append(args, serviceName)
-		argPos++
 	}
 
-	var total int64
+	var total int
+
 	err = h.db.QueryRow(c.Request.Context(), query, args...).Scan(&total)
 	if err != nil {
 		RespondError(c, http.StatusInternalServerError, "failed to calculate summary")
@@ -289,10 +350,11 @@ func (h *Handler) GetSubscriptionsSummary(c *gin.Context) {
 	}
 
 	RespondSuccess(c, http.StatusOK, gin.H{
-		"user_id":      userID,
-		"service_name": serviceName,
-		"period_start": periodStart.Format("01-2006"),
-		"period_end":   periodEnd.Format("01-2006"),
-		"total":        total,
+		"total":     total,
+		"from":      periodStart.Format("01-2006"),
+		"to":        periodEnd.Format("01-2006"),
+		"user_id":   userID,
+		"service":   serviceName,
+		"timestamp": time.Now().UTC().Format(time.RFC3339),
 	})
 }
