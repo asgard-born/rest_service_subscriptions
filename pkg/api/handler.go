@@ -1,6 +1,7 @@
 package api
 
 import (
+	"database/sql"
 	"fmt"
 	"github.com/asgard-born/rest_service_subscriptions/pkg/db"
 	"github.com/asgard-born/rest_service_subscriptions/pkg/utils"
@@ -18,18 +19,18 @@ type Handler struct {
 }
 
 type CreateSubscriptionRequest struct {
-	ServiceName string  `json:"service_name"`
-	Price       int     `json:"price"`
-	UserID      string  `json:"user_id"`
-	StartDate   string  `json:"start_date"`
-	EndDate     *string `json:"end_date,omitempty"`
+	ServiceName string `json:"service_name"`
+	Price       int    `json:"price"`
+	UserID      string `json:"user_id"`
+	StartDate   string `json:"start_date"`
+	EndDate     string `json:"end_date,omitempty"`
 }
 
 type UpdateSubscriptionRequest struct {
-	ServiceName string  `json:"service_name"`
-	Price       int     `json:"price"`
-	StartDate   string  `json:"start_date"`
-	EndDate     *string `json:"end_date,omitempty"`
+	ServiceName string `json:"service_name"`
+	Price       int    `json:"price"`
+	StartDate   string `json:"start_date"`
+	EndDate     string `json:"end_date,omitempty"`
 }
 
 func (h *Handler) CreateSubscription(c *gin.Context) {
@@ -42,32 +43,41 @@ func (h *Handler) CreateSubscription(c *gin.Context) {
 		return
 	}
 
-	startDate, err := time.Parse("01-2006", req.StartDate)
+	startDate, err := utils.ParseToMonthYear(req.StartDate)
 	if err != nil {
-		slog.Warn("Invalid start_date", "value", req.StartDate)
-		RespondError(c, http.StatusBadRequest, "invalid start_date, use MM-YYYY")
+		slog.Warn("Invalid start_date", "value", req.StartDate, "err", err)
+		RespondError(c, http.StatusBadRequest, "invalid start_date format")
 		return
 	}
 
-	var endDate *time.Time
-	if req.EndDate != nil {
-		date, err := time.Parse("01-2006", *req.EndDate)
+	endDate := sql.NullTime{Valid: false}
+	if req.EndDate != "" {
+		date, err := utils.ParseToMonthYear(req.EndDate)
 		if err != nil {
-			slog.Warn("Invalid end_date", "value", *req.EndDate)
-			RespondError(c, http.StatusBadRequest, "invalid end_date, use MM-YYYY")
+			slog.Warn("Invalid end_date", "value", req.EndDate, "err", err)
+			RespondError(c, http.StatusBadRequest, "invalid end_date")
 			return
 		}
-		endDate = &date
+		endDate = sql.NullTime{Time: date, Valid: true}
 	}
 
-	var id string
+	var sub db.Subscription
 	err = h.db.QueryRow(
 		c.Request.Context(),
 		`INSERT INTO subscriptions (service_name, price, user_id, start_date, end_date)
          VALUES ($1, $2, $3, $4, $5)
-         RETURNING id`,
+         RETURNING id, service_name, price, user_id, start_date, end_date, created_at, updated_at`,
 		req.ServiceName, req.Price, req.UserID, startDate, endDate,
-	).Scan(&id)
+	).Scan(
+		&sub.ID,
+		&sub.ServiceName,
+		&sub.Price,
+		&sub.UserID,
+		&sub.StartDate,
+		&sub.EndDate,
+		&sub.CreatedAt,
+		&sub.UpdatedAt,
+	)
 
 	if err != nil {
 		slog.Error("Failed to insert subscription", "error", err)
@@ -75,11 +85,8 @@ func (h *Handler) CreateSubscription(c *gin.Context) {
 		return
 	}
 
-	slog.Info("Subscription created", "id", id)
-	RespondSuccess(c, http.StatusCreated, gin.H{
-		"id":      id,
-		"message": "subscription created successfully",
-	})
+	slog.Info("Subscription created", "id", sub.ID)
+	RespondSuccess(c, http.StatusCreated, ToSubscriptionResponse(sub))
 }
 
 func (h *Handler) GetSubscription(c *gin.Context) {
@@ -94,7 +101,7 @@ func (h *Handler) GetSubscription(c *gin.Context) {
 
 	var sub db.Subscription
 	err := h.db.QueryRow(
-		c,
+		c.Request.Context(),
 		`SELECT id, service_name, price, user_id, start_date, end_date, created_at, updated_at 
          FROM subscriptions 
          WHERE id = $1`,
@@ -141,22 +148,22 @@ func (h *Handler) UpdateSubscription(c *gin.Context) {
 		return
 	}
 
-	startDate, err := time.Parse("01-2006", req.StartDate)
+	startDate, err := utils.ParseToMonthYear(req.StartDate)
 	if err != nil {
-		slog.Warn("Invalid start_date", "value", req.StartDate)
-		RespondError(c, http.StatusBadRequest, "invalid start_date, use MM-YYYY")
+		slog.Warn("Invalid start_date", "value", req.StartDate, "err", err)
+		RespondError(c, http.StatusBadRequest, "invalid start_date format")
 		return
 	}
 
-	var endDate *time.Time
-	if req.EndDate != nil {
-		date, err := time.Parse("01-2006", *req.EndDate)
+	endDate := sql.NullTime{Valid: false}
+	if req.EndDate != "" {
+		date, err := utils.ParseToMonthYear(req.EndDate)
 		if err != nil {
-			slog.Warn("Invalid end_date", "value", *req.EndDate)
-			RespondError(c, http.StatusBadRequest, "invalid end_date, use MM-YYYY")
+			slog.Warn("Invalid end_date", "value", req.EndDate, "err", err)
+			RespondError(c, http.StatusBadRequest, "invalid end_date")
 			return
 		}
-		endDate = &date
+		endDate = sql.NullTime{Time: date, Valid: true}
 	}
 
 	var sub db.Subscription
@@ -226,7 +233,6 @@ func (h *Handler) DeleteSubscription(c *gin.Context) {
 	}
 
 	slog.Info("Subscription deleted", "id", id)
-
 	RespondSuccess(c, http.StatusOK, gin.H{
 		"message": "subscription deleted successfully",
 	})
@@ -316,37 +322,37 @@ func (h *Handler) GetSubscriptionsSummary(c *gin.Context) {
 		"period_end", periodEndQuery,
 	)
 
-	if periodStartQuery == "" {
-		slog.Warn("missing period_start")
-		RespondError(c, http.StatusBadRequest, "period_start is required")
+	if periodStartQuery == "" || periodEndQuery == "" {
+		RespondError(c, http.StatusBadRequest, "period_start and period_end are required")
 		return
 	}
 
 	periodStart, err := utils.ParseToMonthYear(periodStartQuery)
 	if err != nil {
 		slog.Warn("invalid period_start", "value", periodStartQuery, "err", err)
-		RespondError(c, http.StatusBadRequest, "invalid period_start, use MM-YYYY")
+		RespondError(c, http.StatusBadRequest, "invalid period_start")
 		return
 	}
 
-	var periodEnd time.Time
-	if periodEndQuery == "" {
-		now := time.Now().UTC()
-		periodEnd = time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
-	} else {
-		periodEnd, err = utils.ParseToMonthYear(periodEndQuery)
-		if err != nil {
-			slog.Warn("invalid period_end", "value", periodEndQuery, "err", err)
-			RespondError(c, http.StatusBadRequest, "invalid period_end, use MM-YYYY")
-			return
-		}
+	periodEnd, err := utils.ParseToMonthYear(periodEndQuery)
+	if err != nil {
+		slog.Warn("invalid period_end", "value", periodEndQuery, "err", err)
+		RespondError(c, http.StatusBadRequest, "invalid period_end")
+		return
 	}
 
-	query := `SELECT COALESCE(SUM(price), 0)
-			  FROM subscriptions
-			  WHERE start_date >= $1
-			    AND (end_date IS NULL OR end_date >= $1)
-			    AND start_date <= $2`
+	query :=
+		`SELECT COALESCE(SUM(
+		  CASE WHEN start_date <= $2 AND COALESCE(end_date, $2) >= $1
+			THEN price * (
+			  (DATE_PART('year', COALESCE(end_date, $2)) - DATE_PART('year', GREATEST(start_date, $1))) * 12 +
+			  (DATE_PART('month', COALESCE(end_date, $2)) - DATE_PART('month', GREATEST(start_date, $1))) + 1
+			)
+			ELSE 0
+		  END
+		), 0) AS total
+		FROM subscriptions
+		WHERE 1=1`
 
 	args := []interface{}{periodStart, periodEnd}
 
