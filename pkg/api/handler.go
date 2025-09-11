@@ -238,22 +238,30 @@ func (h *Handler) ListSubscriptions(c *gin.Context) {
 	limitStr := c.DefaultQuery("limit", "10")
 	offsetStr := c.DefaultQuery("offset", "0")
 
+	slog.Info("ListSubscriptions called",
+		"user_id", userID,
+		"service_name", serviceName,
+		"limit", limitStr,
+		"offset", offsetStr,
+	)
+
 	limit, err := strconv.Atoi(limitStr)
 	if err != nil || limit <= 0 {
+		slog.Warn("invalid limit", "value", limitStr, "err", err)
 		RespondError(c, http.StatusBadRequest, "invalid limit")
 		return
 	}
 
 	offset, err := strconv.Atoi(offsetStr)
 	if err != nil || offset < 0 {
+		slog.Warn("invalid offset", "value", offsetStr, "err", err)
 		RespondError(c, http.StatusBadRequest, "invalid offset")
 		return
 	}
 
-	query :=
-		`SELECT id, service_name, price, user_id, start_date, end_date, created_at, updated_at
-		FROM subscriptions
-		WHERE 1=1`
+	query := `SELECT id, service_name, price, user_id, start_date, end_date, created_at, updated_at
+			  FROM subscriptions
+			  WHERE 1=1`
 
 	var args []interface{}
 	argIndex := 1
@@ -263,7 +271,6 @@ func (h *Handler) ListSubscriptions(c *gin.Context) {
 		args = append(args, userID)
 		argIndex++
 	}
-
 	if serviceName != "" {
 		query += fmt.Sprintf(" AND service_name = $%d", argIndex)
 		args = append(args, serviceName)
@@ -275,6 +282,7 @@ func (h *Handler) ListSubscriptions(c *gin.Context) {
 
 	rows, err := h.db.Query(c.Request.Context(), query, args...)
 	if err != nil {
+		slog.Error("failed to query subscriptions", "err", err)
 		RespondError(c, http.StatusInternalServerError, "failed to list subscriptions")
 		return
 	}
@@ -284,12 +292,14 @@ func (h *Handler) ListSubscriptions(c *gin.Context) {
 	for rows.Next() {
 		var s db.Subscription
 		if err := rows.Scan(&s.ID, &s.ServiceName, &s.Price, &s.UserID, &s.StartDate, &s.EndDate, &s.CreatedAt, &s.UpdatedAt); err != nil {
+			slog.Error("failed to scan subscription", "err", err)
 			RespondError(c, http.StatusInternalServerError, "failed to scan subscription")
 			return
 		}
 		subs = append(subs, s)
 	}
 
+	slog.Info("subscriptions listed", "count", len(subs))
 	RespondSuccess(c, http.StatusOK, subs)
 }
 
@@ -299,13 +309,22 @@ func (h *Handler) GetSubscriptionsSummary(c *gin.Context) {
 	periodStartQuery := c.Query("period_start")
 	periodEndQuery := c.Query("period_end")
 
+	slog.Info("GetSubscriptionsSummary called",
+		"user_id", userID,
+		"service_name", serviceName,
+		"period_start", periodStartQuery,
+		"period_end", periodEndQuery,
+	)
+
 	if periodStartQuery == "" {
+		slog.Warn("missing period_start")
 		RespondError(c, http.StatusBadRequest, "period_start is required")
 		return
 	}
 
 	periodStart, err := utils.ParseToMonthYear(periodStartQuery)
 	if err != nil {
+		slog.Warn("invalid period_start", "value", periodStartQuery, "err", err)
 		RespondError(c, http.StatusBadRequest, "invalid period_start, use MM-YYYY")
 		return
 	}
@@ -317,17 +336,17 @@ func (h *Handler) GetSubscriptionsSummary(c *gin.Context) {
 	} else {
 		periodEnd, err = utils.ParseToMonthYear(periodEndQuery)
 		if err != nil {
+			slog.Warn("invalid period_end", "value", periodEndQuery, "err", err)
 			RespondError(c, http.StatusBadRequest, "invalid period_end, use MM-YYYY")
 			return
 		}
 	}
 
-	query :=
-		`SELECT COALESCE(SUM(price), 0)
-		FROM subscriptions
-		WHERE start_date >= $1
-		  AND (end_date IS NULL OR end_date >= $1)
-		  AND start_date <= $2`
+	query := `SELECT COALESCE(SUM(price), 0)
+			  FROM subscriptions
+			  WHERE start_date >= $1
+			    AND (end_date IS NULL OR end_date >= $1)
+			    AND start_date <= $2`
 
 	args := []interface{}{periodStart, periodEnd}
 
@@ -335,19 +354,24 @@ func (h *Handler) GetSubscriptionsSummary(c *gin.Context) {
 		query += " AND user_id = $" + strconv.Itoa(len(args)+1)
 		args = append(args, userID)
 	}
-
 	if serviceName != "" {
 		query += " AND service_name = $" + strconv.Itoa(len(args)+1)
 		args = append(args, serviceName)
 	}
 
-	var total int
-
+	var total int64
 	err = h.db.QueryRow(c.Request.Context(), query, args...).Scan(&total)
 	if err != nil {
+		slog.Error("failed to calculate summary", "err", err)
 		RespondError(c, http.StatusInternalServerError, "failed to calculate summary")
 		return
 	}
+
+	slog.Info("summary calculated",
+		"total", total,
+		"from", periodStart,
+		"to", periodEnd,
+	)
 
 	RespondSuccess(c, http.StatusOK, gin.H{
 		"total":     total,
