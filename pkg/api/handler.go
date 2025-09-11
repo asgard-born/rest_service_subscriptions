@@ -220,7 +220,38 @@ func (h *Handler) UpdateSubscription(c *gin.Context) {
 }
 
 func (h *Handler) DeleteSubscription(c *gin.Context) {
+	slog.Info("DeleteSubscription called")
 
+	id := c.Param("id")
+	if id == "" {
+		slog.Warn("Missing id param")
+		RespondError(c, http.StatusBadRequest, "id is required")
+		return
+	}
+
+	cmdTag, err := h.db.Exec(
+		c.Request.Context(),
+		`DELETE FROM subscriptions WHERE id = $1`,
+		id,
+	)
+
+	if err != nil {
+		slog.Error("Failed to delete subscription", "id", id, "error", err)
+		RespondError(c, http.StatusInternalServerError, "failed to delete subscription")
+		return
+	}
+
+	if cmdTag.RowsAffected() == 0 {
+		slog.Warn("Subscription not found for delete", "id", id)
+		RespondError(c, http.StatusNotFound, "subscription not found")
+		return
+	}
+
+	slog.Info("Subscription deleted", "id", id)
+
+	RespondSuccess(c, http.StatusOK, gin.H{
+		"message": "subscription deleted successfully",
+	})
 }
 
 func (h *Handler) ListSubscriptions(c *gin.Context) {
