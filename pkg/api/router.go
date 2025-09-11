@@ -19,9 +19,8 @@ func CreateNewRouter(db *pgxpool.Pool) *gin.Engine {
 		subscriptions.PUT("/:id", h.UpdateSubscription)
 		subscriptions.DELETE("/:id", h.DeleteSubscription)
 		subscriptions.GET("/", h.ListSubscriptions)
+		subscriptions.GET("/summary", h.GetSubscriptionsSummary)
 	}
-
-	router.GET("/subscriptions/summary", h.GetSubscriptionsSummary)
 
 	return router
 }
