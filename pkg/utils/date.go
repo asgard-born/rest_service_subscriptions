@@ -11,6 +11,8 @@ func ParseToMonthYear(input string) (time.Time, error) {
 		"02.01.2006",
 		"01-2006",
 		"2006-01",
+		"01/2006",
+		"2006/01",
 	}
 
 	var t time.Time
@@ -22,5 +24,6 @@ func ParseToMonthYear(input string) (time.Time, error) {
 			return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC), nil
 		}
 	}
+
 	return time.Time{}, fmt.Errorf("invalid date format, expected MM-YYYY")
 }
