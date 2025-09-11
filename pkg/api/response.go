@@ -6,11 +6,11 @@ import (
 )
 
 type APIResponse struct {
-	Success   bool        `json:"success"`
-	Code      int         `json:"code"`
-	Timestamp string      `json:"timestamp"`
-	Data      interface{} `json:"data,omitempty"`
-	Error     string      `json:"error,omitempty"`
+	Success   bool   `json:"success"`
+	Code      int    `json:"code"`
+	Timestamp string `json:"timestamp"`
+	Data      any    `json:"data,omitempty"`
+	Error     string `json:"error,omitempty"`
 }
 
 func RespondSuccess(c *gin.Context, code int, data interface{}) {
