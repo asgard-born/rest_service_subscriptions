@@ -194,7 +194,7 @@ func (h *Handler) UpdateSubscription(c *gin.Context) {
 	}
 
 	slog.Info("Subscription updated", "id", id)
-	RespondSuccess(c, http.StatusOK, sub)
+	RespondSuccess(c, http.StatusOK, ToSubscriptionResponse(sub))
 }
 
 func (h *Handler) DeleteSubscription(c *gin.Context) {
@@ -288,7 +288,7 @@ func (h *Handler) ListSubscriptions(c *gin.Context) {
 	}
 	defer rows.Close()
 
-	var subs []db.Subscription
+	var subs []SubscriptionResponse
 	for rows.Next() {
 		var s db.Subscription
 		if err := rows.Scan(&s.ID, &s.ServiceName, &s.Price, &s.UserID, &s.StartDate, &s.EndDate, &s.CreatedAt, &s.UpdatedAt); err != nil {
@@ -296,7 +296,7 @@ func (h *Handler) ListSubscriptions(c *gin.Context) {
 			RespondError(c, http.StatusInternalServerError, "failed to scan subscription")
 			return
 		}
-		subs = append(subs, s)
+		subs = append(subs, ToSubscriptionResponse(s))
 	}
 
 	slog.Info("subscriptions listed", "count", len(subs))
