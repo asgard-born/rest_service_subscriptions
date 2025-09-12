@@ -345,8 +345,8 @@ func (h *Handler) GetSubscriptionsSummary(c *gin.Context) {
 		`SELECT COALESCE(SUM(
 		  CASE WHEN start_date <= $2 AND COALESCE(end_date, $2) >= $1
 			THEN price * (
-			  (EXTRACT(YEAR FROM COALESCE(end_date, $2)) - EXTRACT(YEAR FROM GREATEST(start_date, $1))) * 12 +
-			  EXTRACT(MONTH FROM COALESCE(end_date, $2)) - EXTRACT(MONTH FROM GREATEST(start_date, $1)) + 1
+			  (EXTRACT(YEAR FROM LEAST(COALESCE(end_date, $2), $2)) - EXTRACT(YEAR FROM GREATEST(start_date, $1))) * 12 +
+			  EXTRACT(MONTH FROM LEAST(COALESCE(end_date, $2), $2)) - EXTRACT(MONTH FROM GREATEST(start_date, $1)) + 1
 			)
 			ELSE 0
 		  END
