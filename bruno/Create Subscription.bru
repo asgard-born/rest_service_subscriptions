@@ -1,0 +1,25 @@
+meta {
+  name: Create Subscription
+  type: http
+  seq: 2
+}
+
+post {
+  url: http://localhost:8080/subscriptions
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "service_name": "Netflix",
+    "price": 500,
+    "user_id": "333e4444-e29b-41d4-a716-446655442222",
+    "start_date": "09-2024",
+    "end_date": "12-2025"
+  }
+}
+
+settings {
+  encodeUrl: true
+}
