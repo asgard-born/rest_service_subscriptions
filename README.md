@@ -28,6 +28,16 @@ Each subscription record includes:
 
 ## Tech Stack
 
-- **Backend:** REST API (framework of your choice)
-- **Database:** PostgreSQL
-- **Migrations:** Included for database initialization  
+* **Language:** Go 1.24
+* **Web Framework:** Gin
+* **Database:** PostgreSQL
+* **Database Driver:** jackc/pgx/v5
+* **Containerization:** Docker
+
+## Implementation Details
+
+* Clean Architecture
+* Database migrations
+* Data validation
+* Pagination
+* Context handling
