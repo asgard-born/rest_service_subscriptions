@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+// APIResponse represents standard API response format
+// swagger:model APIResponse
 type APIResponse struct {
 	Success   bool   `json:"success"`
 	Code      int    `json:"code"`

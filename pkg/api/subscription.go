@@ -1,5 +1,7 @@
 package api
 
+// SubscriptionResponse represents subscription data in API response
+// swagger:model SubscriptionResponse
 type SubscriptionResponse struct {
 	ID          string `json:"id"`
 	ServiceName string `json:"service_name"`

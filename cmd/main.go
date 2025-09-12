@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -9,10 +10,15 @@ import (
 	"time"
 
 	service "github.com/asgard-born/rest_service_subscriptions"
+	_ "github.com/asgard-born/rest_service_subscriptions/docs"
 	"github.com/asgard-born/rest_service_subscriptions/pkg/api"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// @title Subscriptions API
+// @version 1.0
+// @description REST API для управления подписками
+// @host localhost:8080
+// @BasePath /
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,

@@ -18,6 +18,8 @@ type Handler struct {
 	db *pgxpool.Pool
 }
 
+// CreateSubscriptionRequest represents data for creating a subscription
+// swagger:model CreateSubscriptionRequest
 type CreateSubscriptionRequest struct {
 	ServiceName string `json:"service_name"`
 	Price       int    `json:"price"`
@@ -26,6 +28,8 @@ type CreateSubscriptionRequest struct {
 	EndDate     string `json:"end_date,omitempty"`
 }
 
+// UpdateSubscriptionRequest represents data for updating a subscription
+// swagger:model UpdateSubscriptionRequest
 type UpdateSubscriptionRequest struct {
 	ServiceName string `json:"service_name"`
 	Price       int    `json:"price"`
@@ -33,6 +37,17 @@ type UpdateSubscriptionRequest struct {
 	EndDate     string `json:"end_date,omitempty"`
 }
 
+// CreateSubscription godoc
+// @Summary Создать подписку
+// @Description Создаёт новую подписку для пользователя
+// @Tags subscriptions
+// @Accept json
+// @Produce json
+// @Param subscription body CreateSubscriptionRequest true "Данные подписки"
+// @Success 201 {object} SubscriptionResponse
+// @Failure 400 {object} APIResponse
+// @Failure 500 {object} APIResponse
+// @Router /subscriptions [post]
 func (h *Handler) CreateSubscription(c *gin.Context) {
 	slog.Info("CreateSubscription called")
 
@@ -89,6 +104,17 @@ func (h *Handler) CreateSubscription(c *gin.Context) {
 	RespondSuccess(c, http.StatusCreated, ToSubscriptionResponse(sub))
 }
 
+// GetSubscription godoc
+// @Summary Получить подписку
+// @Description Возвращает подписку по ID
+// @Tags subscriptions
+// @Produce json
+// @Param id path string true "ID подписки"
+// @Success 200 {object} SubscriptionResponse
+// @Failure 400 {object} APIResponse
+// @Failure 404 {object} APIResponse
+// @Failure 500 {object} APIResponse
+// @Router /subscriptions/{id} [get]
 func (h *Handler) GetSubscription(c *gin.Context) {
 	slog.Info("GetSubscription called")
 
@@ -131,6 +157,19 @@ func (h *Handler) GetSubscription(c *gin.Context) {
 	RespondSuccess(c, http.StatusOK, ToSubscriptionResponse(sub))
 }
 
+// UpdateSubscription godoc
+// @Summary Обновить подписку
+// @Description Обновляет существующую подписку
+// @Tags subscriptions
+// @Accept json
+// @Produce json
+// @Param id path string true "ID подписки"
+// @Param subscription body UpdateSubscriptionRequest true "Данные для обновления"
+// @Success 200 {object} SubscriptionResponse
+// @Failure 400 {object} APIResponse
+// @Failure 404 {object} APIResponse
+// @Failure 500 {object} APIResponse
+// @Router /subscriptions/{id} [put]
 func (h *Handler) UpdateSubscription(c *gin.Context) {
 	slog.Info("UpdateSubscription called")
 
@@ -204,6 +243,17 @@ func (h *Handler) UpdateSubscription(c *gin.Context) {
 	RespondSuccess(c, http.StatusOK, ToSubscriptionResponse(sub))
 }
 
+// DeleteSubscription godoc
+// @Summary Удалить подписку
+// @Description Удаляет подписку по ID
+// @Tags subscriptions
+// @Produce json
+// @Param id path string true "ID подписки"
+// @Success 200 {object} APIResponse
+// @Failure 400 {object} APIResponse
+// @Failure 404 {object} APIResponse
+// @Failure 500 {object} APIResponse
+// @Router /subscriptions/{id} [delete]
 func (h *Handler) DeleteSubscription(c *gin.Context) {
 	slog.Info("DeleteSubscription called")
 
@@ -238,6 +288,19 @@ func (h *Handler) DeleteSubscription(c *gin.Context) {
 	})
 }
 
+// ListSubscriptions godoc
+// @Summary Список подписок
+// @Description Возвращает список подписок с пагинацией и фильтрацией
+// @Tags subscriptions
+// @Produce json
+// @Param user_id query string false "Фильтр по user_id"
+// @Param service_name query string false "Фильтр по service_name"
+// @Param limit query int false "Лимит (по умолчанию 10)" default(10)
+// @Param offset query int false "Смещение (по умолчанию 0)" default(0)
+// @Success 200 {array} SubscriptionResponse
+// @Failure 400 {object} APIResponse
+// @Failure 500 {object} APIResponse
+// @Router /subscriptions [get]
 func (h *Handler) ListSubscriptions(c *gin.Context) {
 	userID := c.Query("user_id")
 	serviceName := c.Query("service_name")
@@ -309,6 +372,19 @@ func (h *Handler) ListSubscriptions(c *gin.Context) {
 	RespondSuccess(c, http.StatusOK, subs)
 }
 
+// GetSubscriptionsSummary godoc
+// @Summary Сумма подписок
+// @Description Возвращает общую стоимость подписок за период
+// @Tags subscriptions
+// @Produce json
+// @Param user_id query string false "Фильтр по user_id"
+// @Param service_name query string false "Фильтр по service_name"
+// @Param period_start query string true "Начало периода (MM-YYYY)"
+// @Param period_end query string true "Конец периода (MM-YYYY)"
+// @Success 200 {object} object{total=int64,from=string,to=string,user_id=string,service=string,timestamp=string}
+// @Failure 400 {object} APIResponse
+// @Failure 500 {object} APIResponse
+// @Router /subscriptions/summary [get]
 func (h *Handler) GetSubscriptionsSummary(c *gin.Context) {
 	userID := c.Query("user_id")
 	serviceName := c.Query("service_name")
