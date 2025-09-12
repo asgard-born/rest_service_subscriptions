@@ -12,6 +12,7 @@ func ToSubscriptionResponse(s db.Subscription) SubscriptionResponse {
 		ID:          s.ID,
 		ServiceName: s.ServiceName,
 		Price:       s.Price,
+		Currency:    "RUB",
 		UserID:      s.UserID,
 		StartDate:   s.StartDate.Format("01-2006"),
 		EndDate:     endDate,

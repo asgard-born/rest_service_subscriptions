@@ -4,6 +4,7 @@ type SubscriptionResponse struct {
 	ID          string `json:"id"`
 	ServiceName string `json:"service_name"`
 	Price       int64  `json:"price"`
+	Currency    string `json:"currency"`
 	UserID      string `json:"user_id"`
 	StartDate   string `json:"start_date"`
 	EndDate     string `json:"end_date"`
