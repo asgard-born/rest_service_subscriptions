@@ -1,7 +1,11 @@
 # Subscription Service API
 
-A simple REST API for managing user subscriptions and calculating their total costs over a selected period.  
+REST API CRUDL service based on Clean Architecture for managing user subscriptions and calculating their total costs over a selected period.  
 Built with **PostgreSQL** (with migrations for database initialization).
+_____________________________________
+for build use docker command:
+docker compose build --no-cache app && docker compose up -d app
+_____________________________________
 
 ## Features
 
