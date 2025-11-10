@@ -14,7 +14,7 @@ import (
 	_ "github.com/asgard-born/rest_service_subscriptions/docs"
 	"github.com/asgard-born/rest_service_subscriptions/pkg/api"
 	"github.com/asgard-born/rest_service_subscriptions/pkg/domain"
-	"github.com/asgard-born/rest_service_subscriptions/pkg/repository/postgres"
+	"github.com/asgard-born/rest_service_subscriptions/pkg/infrastructure/postgres"
 	"github.com/asgard-born/rest_service_subscriptions/pkg/usecase"
 )
 
@@ -54,7 +54,7 @@ func main() {
 	slog.Info("Connected to Postgres (pgxpool)")
 
 	// Инициализация слоев архитектуры
-	// Repository layer (инфраструктурный слой)
+	// Infrastructure layer (инфраструктурный слой, реализует доменные интерфейсы)
 	subscriptionRepo := postgres.NewSubscriptionRepository(pool)
 
 	// UseCase layer (бизнес-логика)

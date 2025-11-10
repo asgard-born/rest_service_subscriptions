@@ -12,11 +12,11 @@ import (
 // SubscriptionUseCase содержит бизнес-логику для работы с подписками
 // Реализует интерфейс SubscriptionUseCase (определен в api слое)
 type SubscriptionUseCase struct {
-	repo SubscriptionRepository
+	repo domain.SubscriptionRepository
 }
 
 // NewSubscriptionUseCase создает новый экземпляр use case для подписок
-func NewSubscriptionUseCase(repo SubscriptionRepository) *SubscriptionUseCase {
+func NewSubscriptionUseCase(repo domain.SubscriptionRepository) *SubscriptionUseCase {
 	return &SubscriptionUseCase{repo: repo}
 }
 
