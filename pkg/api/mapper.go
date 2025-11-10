@@ -1,8 +1,8 @@
 package api
 
-import "github.com/asgard-born/rest_service_subscriptions/pkg/db"
+import "github.com/asgard-born/rest_service_subscriptions/pkg/domain"
 
-func ToSubscriptionResponse(s db.Subscription) SubscriptionResponse {
+func ToSubscriptionResponse(s *domain.Subscription) SubscriptionResponse {
 	var endDate string
 	if s.EndDate.Valid {
 		endDate = s.EndDate.Time.Format("01-2006")

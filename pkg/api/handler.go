@@ -1,39 +1,42 @@
 package api
 
 import (
-	"database/sql"
-	"fmt"
-	"github.com/asgard-born/rest_service_subscriptions/pkg/db"
-	"github.com/asgard-born/rest_service_subscriptions/pkg/utils"
-	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 type Handler struct {
-	db *pgxpool.Pool
+	subscriptionUseCase SubscriptionUseCase
+}
+
+// NewHandler создает новый экземпляр хэндлера
+func NewHandler(subscriptionUseCase SubscriptionUseCase) *Handler {
+	return &Handler{
+		subscriptionUseCase: subscriptionUseCase,
+	}
 }
 
 // CreateSubscriptionRequest represents data for creating a subscription
 // swagger:model CreateSubscriptionRequest
 type CreateSubscriptionRequest struct {
-	ServiceName string `json:"service_name"`
-	Price       int    `json:"price"`
-	UserID      string `json:"user_id"`
-	StartDate   string `json:"start_date"`
+	ServiceName string `json:"service_name" binding:"required"`
+	Price       int    `json:"price" binding:"required,min=0"`
+	UserID      string `json:"user_id" binding:"required"`
+	StartDate   string `json:"start_date" binding:"required"`
 	EndDate     string `json:"end_date,omitempty"`
 }
 
 // UpdateSubscriptionRequest represents data for updating a subscription
 // swagger:model UpdateSubscriptionRequest
 type UpdateSubscriptionRequest struct {
-	ServiceName string `json:"service_name"`
-	Price       int    `json:"price"`
-	StartDate   string `json:"start_date"`
+	ServiceName string `json:"service_name" binding:"required"`
+	Price       int    `json:"price" binding:"required,min=0"`
+	StartDate   string `json:"start_date" binding:"required"`
 	EndDate     string `json:"end_date,omitempty"`
 }
 
@@ -52,51 +55,26 @@ func (h *Handler) CreateSubscription(c *gin.Context) {
 	slog.Info("CreateSubscription called")
 
 	var req CreateSubscriptionRequest
-	if err := c.BindJSON(&req); err != nil {
-		slog.Error("Failed to bind JSON", "error", err)
-		RespondError(c, http.StatusBadRequest, "invalid request body")
+	if err := c.ShouldBindJSON(&req); err != nil {
+		slog.Warn("Failed to bind JSON", "error", err)
+		RespondError(c, http.StatusBadRequest, "invalid request body: "+err.Error())
 		return
 	}
 
-	startDate, err := utils.ParseToMonthYear(req.StartDate)
-	if err != nil {
-		slog.Warn("Invalid start_date", "value", req.StartDate, "err", err)
-		RespondError(c, http.StatusBadRequest, "invalid start_date format")
-		return
+	// Преобразование HTTP запроса в use case запрос
+	useCaseReq := CreateSubscriptionInput{
+		ServiceName: req.ServiceName,
+		Price:       req.Price,
+		UserID:      req.UserID,
+		StartDate:   req.StartDate,
+		EndDate:     req.EndDate,
 	}
 
-	endDate := sql.NullTime{Valid: false}
-	if req.EndDate != "" {
-		date, err := utils.ParseToMonthYear(req.EndDate)
-		if err != nil {
-			slog.Warn("Invalid end_date", "value", req.EndDate, "err", err)
-			RespondError(c, http.StatusBadRequest, "invalid end_date")
-			return
-		}
-		endDate = sql.NullTime{Time: date, Valid: true}
-	}
-
-	var sub db.Subscription
-	err = h.db.QueryRow(
-		c.Request.Context(),
-		`INSERT INTO subscriptions (service_name, price, user_id, start_date, end_date)
-         VALUES ($1, $2, $3, $4, $5)
-         RETURNING id, service_name, price, user_id, start_date, end_date, created_at, updated_at`,
-		req.ServiceName, req.Price, req.UserID, startDate, endDate,
-	).Scan(
-		&sub.ID,
-		&sub.ServiceName,
-		&sub.Price,
-		&sub.UserID,
-		&sub.StartDate,
-		&sub.EndDate,
-		&sub.CreatedAt,
-		&sub.UpdatedAt,
-	)
-
+	// Вызов use case
+	sub, err := h.subscriptionUseCase.CreateSubscription(c.Request.Context(), useCaseReq)
 	if err != nil {
-		slog.Error("Failed to insert subscription", "error", err)
-		RespondError(c, http.StatusInternalServerError, "failed to insert subscription")
+		slog.Error("Failed to create subscription", "error", err)
+		handleError(c, err)
 		return
 	}
 
@@ -125,31 +103,11 @@ func (h *Handler) GetSubscription(c *gin.Context) {
 		return
 	}
 
-	var sub db.Subscription
-	err := h.db.QueryRow(
-		c.Request.Context(),
-		`SELECT id, service_name, price, user_id, start_date, end_date, created_at, updated_at 
-         FROM subscriptions 
-         WHERE id = $1`,
-		id,
-	).Scan(
-		&sub.ID,
-		&sub.ServiceName,
-		&sub.Price,
-		&sub.UserID,
-		&sub.StartDate,
-		&sub.EndDate,
-		&sub.CreatedAt,
-		&sub.UpdatedAt)
-
-	if err == pgx.ErrNoRows {
-		slog.Warn("Subscription not found", "id", id)
-		RespondError(c, http.StatusNotFound, "subscription not found")
-		return
-	}
+	// Вызов use case
+	sub, err := h.subscriptionUseCase.GetSubscription(c.Request.Context(), id)
 	if err != nil {
 		slog.Error("Failed to get subscription", "id", id, "error", err)
-		RespondError(c, http.StatusInternalServerError, "failed to get subscription")
+		handleError(c, err)
 		return
 	}
 
@@ -181,61 +139,25 @@ func (h *Handler) UpdateSubscription(c *gin.Context) {
 	}
 
 	var req UpdateSubscriptionRequest
-	if err := c.BindJSON(&req); err != nil {
-		slog.Error("Failed to bind JSON", "error", err)
-		RespondError(c, http.StatusBadRequest, "invalid request body")
+	if err := c.ShouldBindJSON(&req); err != nil {
+		slog.Warn("Failed to bind JSON", "error", err)
+		RespondError(c, http.StatusBadRequest, "invalid request body: "+err.Error())
 		return
 	}
 
-	startDate, err := utils.ParseToMonthYear(req.StartDate)
-	if err != nil {
-		slog.Warn("Invalid start_date", "value", req.StartDate, "err", err)
-		RespondError(c, http.StatusBadRequest, "invalid start_date format")
-		return
+	// Преобразование HTTP запроса в use case запрос
+	useCaseReq := UpdateSubscriptionInput{
+		ServiceName: req.ServiceName,
+		Price:       req.Price,
+		StartDate:   req.StartDate,
+		EndDate:     req.EndDate,
 	}
 
-	endDate := sql.NullTime{Valid: false}
-	if req.EndDate != "" {
-		date, err := utils.ParseToMonthYear(req.EndDate)
-		if err != nil {
-			slog.Warn("Invalid end_date", "value", req.EndDate, "err", err)
-			RespondError(c, http.StatusBadRequest, "invalid end_date")
-			return
-		}
-		endDate = sql.NullTime{Time: date, Valid: true}
-	}
-
-	var sub db.Subscription
-
-	err = h.db.QueryRow(
-		c.Request.Context(),
-		`UPDATE subscriptions
-         SET service_name = $1,
-             price = $2,
-             start_date = $3,
-             end_date = $4,
-             updated_at = now()
-         WHERE id = $5
-         RETURNING id, service_name, price, user_id, start_date, end_date, created_at, updated_at`,
-		req.ServiceName, req.Price, startDate, endDate, id,
-	).Scan(
-		&sub.ID,
-		&sub.ServiceName,
-		&sub.Price,
-		&sub.UserID,
-		&sub.StartDate,
-		&sub.EndDate,
-		&sub.CreatedAt,
-		&sub.UpdatedAt)
-
-	if err == pgx.ErrNoRows {
-		slog.Warn("Subscription not found for update", "id", id)
-		RespondError(c, http.StatusNotFound, "subscription not found")
-		return
-	}
+	// Вызов use case
+	sub, err := h.subscriptionUseCase.UpdateSubscription(c.Request.Context(), id, useCaseReq)
 	if err != nil {
 		slog.Error("Failed to update subscription", "id", id, "error", err)
-		RespondError(c, http.StatusInternalServerError, "failed to update subscription")
+		handleError(c, err)
 		return
 	}
 
@@ -264,21 +186,11 @@ func (h *Handler) DeleteSubscription(c *gin.Context) {
 		return
 	}
 
-	cmdTag, err := h.db.Exec(
-		c.Request.Context(),
-		`DELETE FROM subscriptions WHERE id = $1`,
-		id,
-	)
-
+	// Вызов use case
+	err := h.subscriptionUseCase.DeleteSubscription(c.Request.Context(), id)
 	if err != nil {
 		slog.Error("Failed to delete subscription", "id", id, "error", err)
-		RespondError(c, http.StatusInternalServerError, "failed to delete subscription")
-		return
-	}
-
-	if cmdTag.RowsAffected() == 0 {
-		slog.Warn("Subscription not found for delete", "id", id)
-		RespondError(c, http.StatusNotFound, "subscription not found")
+		handleError(c, err)
 		return
 	}
 
@@ -328,48 +240,30 @@ func (h *Handler) ListSubscriptions(c *gin.Context) {
 		return
 	}
 
-	query := `SELECT id, service_name, price, user_id, start_date, end_date, created_at, updated_at
-			  FROM subscriptions
-			  WHERE 1=1`
-
-	var args []interface{}
-	argIndex := 1
-
-	if userID != "" {
-		query += fmt.Sprintf(" AND user_id = $%d", argIndex)
-		args = append(args, userID)
-		argIndex++
-	}
-	if serviceName != "" {
-		query += fmt.Sprintf(" AND service_name = $%d", argIndex)
-		args = append(args, serviceName)
-		argIndex++
+	// Преобразование HTTP запроса в use case запрос
+	useCaseReq := ListFiltersInput{
+		UserID:      userID,
+		ServiceName: serviceName,
+		Limit:       limit,
+		Offset:      offset,
 	}
 
-	query += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d OFFSET $%d", argIndex, argIndex+1)
-	args = append(args, limit, offset)
-
-	rows, err := h.db.Query(c.Request.Context(), query, args...)
+	// Вызов use case
+	subs, err := h.subscriptionUseCase.ListSubscriptions(c.Request.Context(), useCaseReq)
 	if err != nil {
-		slog.Error("failed to query subscriptions", "err", err)
-		RespondError(c, http.StatusInternalServerError, "failed to list subscriptions")
+		slog.Error("Failed to list subscriptions", "error", err)
+		handleError(c, err)
 		return
 	}
-	defer rows.Close()
 
-	var subs []SubscriptionResponse
-	for rows.Next() {
-		var s db.Subscription
-		if err := rows.Scan(&s.ID, &s.ServiceName, &s.Price, &s.UserID, &s.StartDate, &s.EndDate, &s.CreatedAt, &s.UpdatedAt); err != nil {
-			slog.Error("failed to scan subscription", "err", err)
-			RespondError(c, http.StatusInternalServerError, "failed to scan subscription")
-			return
-		}
-		subs = append(subs, ToSubscriptionResponse(s))
+	// Преобразование доменных моделей в HTTP ответы
+	responses := make([]SubscriptionResponse, 0, len(subs))
+	for _, sub := range subs {
+		responses = append(responses, ToSubscriptionResponse(sub))
 	}
 
-	slog.Info("subscriptions listed", "count", len(subs))
-	RespondSuccess(c, http.StatusOK, subs)
+	slog.Info("subscriptions listed", "count", len(responses))
+	RespondSuccess(c, http.StatusOK, responses)
 }
 
 // GetSubscriptionsSummary godoc
@@ -398,69 +292,53 @@ func (h *Handler) GetSubscriptionsSummary(c *gin.Context) {
 		"period_end", periodEndQuery,
 	)
 
-	if periodStartQuery == "" || periodEndQuery == "" {
-		RespondError(c, http.StatusBadRequest, "period_start and period_end are required")
-		return
+	// Преобразование HTTP запроса в use case запрос
+	useCaseReq := SummaryFiltersInput{
+		UserID:      userID,
+		ServiceName: serviceName,
+		PeriodStart: periodStartQuery,
+		PeriodEnd:   periodEndQuery,
 	}
 
-	periodStart, err := utils.ParseToMonthYear(periodStartQuery)
+	// Вызов use case
+	total, err := h.subscriptionUseCase.GetSubscriptionsSummary(c.Request.Context(), useCaseReq)
 	if err != nil {
-		slog.Warn("invalid period_start", "value", periodStartQuery, "err", err)
-		RespondError(c, http.StatusBadRequest, "invalid period_start")
-		return
-	}
-
-	periodEnd, err := utils.ParseToMonthYear(periodEndQuery)
-	if err != nil {
-		slog.Warn("invalid period_end", "value", periodEndQuery, "err", err)
-		RespondError(c, http.StatusBadRequest, "invalid period_end")
-		return
-	}
-
-	query :=
-		`SELECT COALESCE(SUM(
-		  CASE WHEN start_date <= $2 AND COALESCE(end_date, $2) >= $1
-			THEN price * (
-			  (EXTRACT(YEAR FROM LEAST(COALESCE(end_date, $2), $2)) - EXTRACT(YEAR FROM GREATEST(start_date, $1))) * 12 +
-			  EXTRACT(MONTH FROM LEAST(COALESCE(end_date, $2), $2)) - EXTRACT(MONTH FROM GREATEST(start_date, $1)) + 1
-			)
-			ELSE 0
-		  END
-		), 0) AS total
-		FROM subscriptions
-		WHERE 1=1`
-
-	args := []interface{}{periodStart, periodEnd}
-
-	if userID != "" {
-		query += " AND user_id = $" + strconv.Itoa(len(args)+1)
-		args = append(args, userID)
-	}
-	if serviceName != "" {
-		query += " AND service_name = $" + strconv.Itoa(len(args)+1)
-		args = append(args, serviceName)
-	}
-
-	var total int64
-	err = h.db.QueryRow(c.Request.Context(), query, args...).Scan(&total)
-	if err != nil {
-		slog.Error("failed to calculate summary", "err", err)
-		RespondError(c, http.StatusInternalServerError, "failed to calculate summary")
+		slog.Error("Failed to get summary", "error", err)
+		handleError(c, err)
 		return
 	}
 
 	slog.Info("summary calculated",
 		"total", total,
-		"from", periodStart,
-		"to", periodEnd,
+		"from", periodStartQuery,
+		"to", periodEndQuery,
 	)
 
 	RespondSuccess(c, http.StatusOK, gin.H{
 		"total":     total,
-		"from":      periodStart.Format("01-2006"),
-		"to":        periodEnd.Format("01-2006"),
+		"from":      periodStartQuery,
+		"to":        periodEndQuery,
 		"user_id":   userID,
 		"service":   serviceName,
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 	})
+}
+
+// handleError обрабатывает ошибки от use case и возвращает соответствующий HTTP статус
+func handleError(c *gin.Context, err error) {
+	if err == nil {
+		return
+	}
+
+	errMsg := err.Error()
+
+	// Определяем тип ошибки по содержимому сообщения
+	switch {
+	case strings.Contains(errMsg, "not found"):
+		RespondError(c, http.StatusNotFound, errMsg)
+	case strings.Contains(errMsg, "invalid") || strings.Contains(errMsg, "required") || strings.Contains(errMsg, "must be"):
+		RespondError(c, http.StatusBadRequest, errMsg)
+	default:
+		RespondError(c, http.StatusInternalServerError, "internal server error")
+	}
 }

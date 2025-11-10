@@ -2,15 +2,13 @@ package api
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5/pgxpool"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
-func CreateNewRouter(db *pgxpool.Pool) *gin.Engine {
-	h := Handler{
-		db: db,
-	}
+// CreateNewRouter создает новый роутер с инициализированными хэндлерами
+func CreateNewRouter(subscriptionUseCase SubscriptionUseCase) *gin.Engine {
+	h := NewHandler(subscriptionUseCase)
 
 	router := gin.New()
 	router.Use(gin.Logger())
