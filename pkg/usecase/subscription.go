@@ -214,7 +214,6 @@ func (uc *SubscriptionUseCase) GetSubscriptionsSummary(ctx context.Context, filt
 }
 
 // CreateSubscriptionInput представляет входные данные для создания подписки
-// Структурно идентичен api.CreateSubscriptionInput для duck typing
 type CreateSubscriptionInput struct {
 	ServiceName string
 	Price       int
@@ -224,7 +223,6 @@ type CreateSubscriptionInput struct {
 }
 
 // UpdateSubscriptionInput представляет входные данные для обновления подписки
-// Структурно идентичен api.UpdateSubscriptionInput для duck typing
 type UpdateSubscriptionInput struct {
 	ServiceName string
 	Price       int
@@ -233,7 +231,6 @@ type UpdateSubscriptionInput struct {
 }
 
 // ListFiltersInput представляет входные данные для получения списка подписок
-// Структурно идентичен api.ListFiltersInput для duck typing
 type ListFiltersInput struct {
 	UserID      string
 	ServiceName string
@@ -242,7 +239,6 @@ type ListFiltersInput struct {
 }
 
 // SummaryFiltersInput представляет входные данные для получения суммы подписок
-// Структурно идентичен api.SummaryFiltersInput для duck typing
 type SummaryFiltersInput struct {
 	UserID      string
 	ServiceName string

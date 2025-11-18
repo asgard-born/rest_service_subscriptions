@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/asgard-born/rest_service_subscriptions/pkg/usecase"
 	"github.com/gin-gonic/gin"
 )
 
@@ -62,7 +63,7 @@ func (h *Handler) CreateSubscription(c *gin.Context) {
 	}
 
 	// Преобразование HTTP запроса в use case запрос
-	useCaseReq := CreateSubscriptionInput{
+	useCaseReq := usecase.CreateSubscriptionInput{
 		ServiceName: req.ServiceName,
 		Price:       req.Price,
 		UserID:      req.UserID,
@@ -146,7 +147,7 @@ func (h *Handler) UpdateSubscription(c *gin.Context) {
 	}
 
 	// Преобразование HTTP запроса в use case запрос
-	useCaseReq := UpdateSubscriptionInput{
+	useCaseReq := usecase.UpdateSubscriptionInput{
 		ServiceName: req.ServiceName,
 		Price:       req.Price,
 		StartDate:   req.StartDate,
@@ -241,7 +242,7 @@ func (h *Handler) ListSubscriptions(c *gin.Context) {
 	}
 
 	// Преобразование HTTP запроса в use case запрос
-	useCaseReq := ListFiltersInput{
+	useCaseReq := usecase.ListFiltersInput{
 		UserID:      userID,
 		ServiceName: serviceName,
 		Limit:       limit,
@@ -293,7 +294,7 @@ func (h *Handler) GetSubscriptionsSummary(c *gin.Context) {
 	)
 
 	// Преобразование HTTP запроса в use case запрос
-	useCaseReq := SummaryFiltersInput{
+	useCaseReq := usecase.SummaryFiltersInput{
 		UserID:      userID,
 		ServiceName: serviceName,
 		PeriodStart: periodStartQuery,

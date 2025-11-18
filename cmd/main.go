@@ -13,7 +13,6 @@ import (
 	service "github.com/asgard-born/rest_service_subscriptions"
 	_ "github.com/asgard-born/rest_service_subscriptions/docs"
 	"github.com/asgard-born/rest_service_subscriptions/pkg/api"
-	"github.com/asgard-born/rest_service_subscriptions/pkg/domain"
 	"github.com/asgard-born/rest_service_subscriptions/pkg/infrastructure/postgres"
 	"github.com/asgard-born/rest_service_subscriptions/pkg/usecase"
 )
@@ -58,10 +57,7 @@ func main() {
 	subscriptionRepo := postgres.NewSubscriptionRepository(pool)
 
 	// UseCase layer (бизнес-логика)
-	subscriptionUseCaseImpl := usecase.NewSubscriptionUseCase(subscriptionRepo)
-
-	// Адаптер для преобразования типов между API и UseCase слоями
-	subscriptionUseCase := &useCaseAdapter{uc: subscriptionUseCaseImpl}
+	subscriptionUseCase := usecase.NewSubscriptionUseCase(subscriptionRepo)
 
 	// API layer (хэндлеры и роутер)
 	router := api.CreateNewRouter(subscriptionUseCase)
@@ -96,59 +92,4 @@ func main() {
 	}
 
 	slog.Info("Server exited properly")
-}
-
-// useCaseAdapter адаптирует usecase.SubscriptionUseCase к интерфейсу api.SubscriptionUseCase
-// Преобразует типы между API и UseCase слоями
-type useCaseAdapter struct {
-	uc *usecase.SubscriptionUseCase
-}
-
-func (a *useCaseAdapter) CreateSubscription(ctx context.Context, req api.CreateSubscriptionInput) (*domain.Subscription, error) {
-	ucReq := usecase.CreateSubscriptionInput{
-		ServiceName: req.ServiceName,
-		Price:       req.Price,
-		UserID:      req.UserID,
-		StartDate:   req.StartDate,
-		EndDate:     req.EndDate,
-	}
-	return a.uc.CreateSubscription(ctx, ucReq)
-}
-
-func (a *useCaseAdapter) GetSubscription(ctx context.Context, id string) (*domain.Subscription, error) {
-	return a.uc.GetSubscription(ctx, id)
-}
-
-func (a *useCaseAdapter) UpdateSubscription(ctx context.Context, id string, req api.UpdateSubscriptionInput) (*domain.Subscription, error) {
-	ucReq := usecase.UpdateSubscriptionInput{
-		ServiceName: req.ServiceName,
-		Price:       req.Price,
-		StartDate:   req.StartDate,
-		EndDate:     req.EndDate,
-	}
-	return a.uc.UpdateSubscription(ctx, id, ucReq)
-}
-
-func (a *useCaseAdapter) DeleteSubscription(ctx context.Context, id string) error {
-	return a.uc.DeleteSubscription(ctx, id)
-}
-
-func (a *useCaseAdapter) ListSubscriptions(ctx context.Context, filters api.ListFiltersInput) ([]*domain.Subscription, error) {
-	ucFilters := usecase.ListFiltersInput{
-		UserID:      filters.UserID,
-		ServiceName: filters.ServiceName,
-		Limit:       filters.Limit,
-		Offset:      filters.Offset,
-	}
-	return a.uc.ListSubscriptions(ctx, ucFilters)
-}
-
-func (a *useCaseAdapter) GetSubscriptionsSummary(ctx context.Context, filters api.SummaryFiltersInput) (int64, error) {
-	ucFilters := usecase.SummaryFiltersInput{
-		UserID:      filters.UserID,
-		ServiceName: filters.ServiceName,
-		PeriodStart: filters.PeriodStart,
-		PeriodEnd:   filters.PeriodEnd,
-	}
-	return a.uc.GetSubscriptionsSummary(ctx, ucFilters)
 }
